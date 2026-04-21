@@ -26,12 +26,12 @@ import (
 	drv_version "github.com/hashicorp/nomad-driver-container/version"
 )
 
+// pluginVersion is the semantic version of this driver plugin.
+var pluginVersion = "v" + drv_version.Version
+
 const (
 	// PluginName is the name of the driver plugin used in Nomad job specs.
 	PluginName = "container"
-
-	// pluginVersion is the semantic version of this driver plugin.
-	pluginVersion = "v" + drv_version.Version
 
 	// defaultContainerPath is the default location of the Apple container CLI.
 	defaultContainerPath = "/usr/local/bin/container"
@@ -640,9 +640,9 @@ func (d *Driver) buildRunArgs(
 		if mem > 0 {
 			args = append(args, "--memory", fmt.Sprintf("%dMiB", mem))
 		}
-		if cfg.Resources.NomadResources.Cpu.ReservedCores > 0 {
+		if len(cfg.Resources.NomadResources.Cpu.ReservedCores) > 0 {
 			args = append(args, "--cpus",
-				strconv.FormatUint(uint64(cfg.Resources.NomadResources.Cpu.ReservedCores), 10))
+				strconv.Itoa(len(cfg.Resources.NomadResources.Cpu.ReservedCores)))
 		}
 	}
 

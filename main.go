@@ -25,9 +25,7 @@ func main() {
 	goplugin.Serve(&goplugin.ServeConfig{
 		HandshakeConfig: base.Handshake,
 		Plugins: map[string]goplugin.Plugin{
-			base.PluginTypeDriver: &drivers.DriverPlugin{
-				Impl: NewDriver(logger),
-			},
+			base.PluginTypeDriver: drivers.NewDriverPlugin(NewDriver(logger)),
 		},
 		GRPCServer: goplugin.DefaultGRPCServer,
 		Logger:     logger,
