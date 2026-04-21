@@ -1,0 +1,148 @@
+# Release workflow — builds nomad-driver-container and publishes a GitHub
+# pre-release on every push to main.
+#
+# ⚠️  ALPHA SOFTWARE — This driver is under active development.
+#     Releases created by this workflow make no guarantees of stability,
+#     correctness, or API compatibility.  Use at your own risk.
+#
+# Each run tags the release as:
+#   v<VERSION>-<PRE_RELEASE>+<short-sha>
+# e.g. v0.1.0-dev+abc1234
+#
+# Because the plugin requires Apple Silicon + macOS 26, the only target
+# produced is darwin/arm64.
+
+name: Release
+
+on:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: write   # needed to create tags and releases
+
+jobs:
+  build-and-release:
+    name: Build and publish pre-release
+    runs-on: macos-latest   # arm64 runner; darwin/arm64 CGO not needed here
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0   # full history so `git describe` works
+
+      # ── Read version from source ──────────────────────────────────────────
+      - name: Extract version
+        id: ver
+        run: |
+          VERSION=$(grep 'Version\s*=' version/version.go \
+            | head -1 | awk '{print $3}' | tr -d '"')
+          PRE=$(grep 'VersionPreRelease\s*=' version/version.go \
+            | head -1 | awk '{print $3}' | tr -d '"')
+          SHA=$(git rev-parse --short HEAD)
+
+          if [ -n "$PRE" ]; then
+            TAG="v${VERSION}-${PRE}+${SHA}"
+          else
+            TAG="v${VERSION}+${SHA}"
+          fi
+
+          echo "VERSION=$VERSION"   >> "$GITHUB_OUTPUT"
+          echo "PRE=$PRE"           >> "$GITHUB_OUTPUT"
+          echo "SHA=$SHA"           >> "$GITHUB_OUTPUT"
+          echo "TAG=$TAG"           >> "$GITHUB_OUTPUT"
+          echo "Computed tag: $TAG"
+
+      # ── Set up Go ─────────────────────────────────────────────────────────
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      # ── Resolve dependencies ──────────────────────────────────────────────
+      - name: Download modules
+        run: go mod download
+
+      # ── Build darwin/arm64 binary ─────────────────────────────────────────
+      #
+      # This plugin only works on macOS 26+ with Apple Silicon, so we build
+      # exclusively for darwin/arm64.  CGO is disabled because the driver
+      # shells out to the `container` CLI rather than linking against a C lib.
+      - name: Build (darwin/arm64)
+        env:
+          GOOS: darwin
+          GOARCH: arm64
+          CGO_ENABLED: "0"
+        run: |
+          mkdir -p build
+          LDFLAGS="-s -w \
+            -X github.com/hashicorp/nomad-driver-container/version.Version=${{ steps.ver.outputs.VERSION }} \
+            -X github.com/hashicorp/nomad-driver-container/version.VersionPreRelease=${{ steps.ver.outputs.PRE }}"
+          go build -ldflags "$LDFLAGS" -trimpath -o build/nomad-driver-container .
+
+      # ── Create the tag ────────────────────────────────────────────────────
+      #
+      # `+` is not valid in a git tag; replace it with a hyphen.
+      - name: Create and push tag
+        run: |
+          TAG="${{ steps.ver.outputs.TAG }}"
+          GIT_TAG="${TAG//+/-}"
+          echo "GIT_TAG=$GIT_TAG" >> "$GITHUB_ENV"
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git tag -a "$GIT_TAG" -m "Automated pre-release $GIT_TAG"
+          git push origin "$GIT_TAG"
+
+      # ── Archive the binary ────────────────────────────────────────────────
+      - name: Package binary
+        run: |
+          cd build
+          ARCHIVE="nomad-driver-container-darwin-arm64.tar.gz"
+          tar -czf "$ARCHIVE" nomad-driver-container
+          shasum -a 256 "$ARCHIVE" | tee "${ARCHIVE}.sha256"
+          echo "ARCHIVE=$ARCHIVE" >> "$GITHUB_ENV"
+
+      # ── Publish the GitHub Release ────────────────────────────────────────
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ env.GIT_TAG }}
+          name: "${{ env.GIT_TAG }} (alpha)"
+          prerelease: true
+          body: |
+            ## ⚠️ Alpha — not guaranteed to work
+
+            This is an automated pre-release built from commit `${{ steps.ver.outputs.SHA }}` on `main`.
+
+            **Do not use in production.**  The driver is under active development and may:
+            - crash or corrupt task state
+            - break across minor version bumps
+            - require manual cleanup of orphaned containers
+
+            ---
+
+            ### Requirements
+            - Apple Silicon Mac (M1/M2/M3/M4)
+            - macOS 26 (Sequoia) or later
+            - [Apple container CLI](https://github.com/apple/container/releases) ≥ 0.11.0
+            - Nomad ≥ 1.8.0
+
+            ### Installation
+
+            1. Download `nomad-driver-container-darwin-arm64.tar.gz` below.
+            2. Extract and place the binary in your Nomad `plugin_dir`.
+            3. Add the plugin block to your client config (see [README](../blob/main/README.md)).
+            4. Restart the Nomad client.
+
+            ```sh
+            tar -xzf nomad-driver-container-darwin-arm64.tar.gz
+            cp nomad-driver-container /path/to/nomad/plugins/
+            ```
+
+            Verify the SHA-256 checksum against `nomad-driver-container-darwin-arm64.tar.gz.sha256`.
+          files: |
+            build/nomad-driver-container-darwin-arm64.tar.gz
+            build/nomad-driver-container-darwin-arm64.tar.gz.sha256
