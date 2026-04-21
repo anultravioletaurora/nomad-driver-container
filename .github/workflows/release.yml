@@ -63,8 +63,9 @@ jobs:
           cache: true
 
       # ── Resolve dependencies ──────────────────────────────────────────────
-      - name: Download modules
-        run: go mod download
+      # go.sum is not committed (scaffolded project), so tidy generates it.
+      - name: Tidy modules
+        run: go mod tidy
 
       # ── Build darwin/arm64 binary ─────────────────────────────────────────
       #
