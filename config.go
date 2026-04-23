@@ -198,14 +198,14 @@ var taskConfigSpec = hclspec.NewObject(map[string]*hclspec.Spec{
 // PluginConfig holds configuration set by the Nomad operator in the
 // plugin{} block of the client agent configuration.
 type PluginConfig struct {
-	Enabled              bool        `codec:"enabled"`
-	ContainerPath        string      `codec:"container_path"`
-	DisableLogCollection bool        `codec:"disable_log_collection"`
-	ExtraLabels          []string    `codec:"extra_labels"`
-	ImagePullTimeout     string      `codec:"image_pull_timeout"`
-	GC                   GCConfig    `codec:"gc"`
+	Enabled              bool         `codec:"enabled"`
+	ContainerPath        string       `codec:"container_path"`
+	DisableLogCollection bool         `codec:"disable_log_collection"`
+	ExtraLabels          []string     `codec:"extra_labels"`
+	ImagePullTimeout     string       `codec:"image_pull_timeout"`
+	GC                   GCConfig     `codec:"gc"`
 	Volumes              VolumeConfig `codec:"volumes"`
-	Auth                 *AuthConfig `codec:"auth"`
+	Auth                 *AuthConfig  `codec:"auth"`
 }
 
 // GCConfig controls garbage-collection behaviour.
@@ -266,7 +266,7 @@ type TaskConfig struct {
 // output. Adjust to match the actual `container inspect` JSON schema once
 // confirmed against a running system.
 type inspectState struct {
-	Status   string `json:"status"`   // "running", "stopped", "exited"
+	Status   string `json:"status"` // "running", "stopped", "exited"
 	ExitCode int    `json:"exitCode"`
 	Pid      int    `json:"pid"`
 }
