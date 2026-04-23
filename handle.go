@@ -11,8 +11,8 @@ import (
 	"time"
 
 	hclog "github.com/hashicorp/go-hclog"
-	cstructs "github.com/hashicorp/nomad/client/structs"
 	"github.com/hashicorp/nomad/client/lib/fifo"
+	cstructs "github.com/hashicorp/nomad/client/structs"
 	"github.com/hashicorp/nomad/plugins/drivers"
 )
 
@@ -78,13 +78,17 @@ func (h *taskHandle) setExitResult(result *drivers.ExitResult) {
 	h.procState = drivers.TaskStateExited
 }
 
+// taskPollInterval is how often runWaitLoop checks the container status.
+// It is a variable (rather than a constant) so tests can reduce it.
+var taskPollInterval = 2 * time.Second
+
 // runWaitLoop polls `container inspect` until the container exits, then
 // records the exit result and closes doneCh.  It is started as a goroutine
 // by StartTask.
 func (h *taskHandle) runWaitLoop(inspectFn func(name string) (*inspectData, error)) {
 	defer close(h.doneCh)
 
-	const pollInterval = 2 * time.Second
+	pollInterval := taskPollInterval
 
 	for {
 		select {
