@@ -32,9 +32,9 @@ job "redis" {
         # Run an init process for clean signal handling.
         init = true
 
-        labels = {
-          "app"       = "redis"
-          "component" = "cache"
+        labels {
+          app       = "redis"
+          component = "cache"
         }
       }
 
@@ -69,7 +69,7 @@ job "redis" {
         # Redis on 127.0.0.1:6379 without an external port.
         network_mode = "task:redis"
 
-        env = {
+        env {
           REDIS_ADDR = "redis://127.0.0.1:6379"
         }
       }

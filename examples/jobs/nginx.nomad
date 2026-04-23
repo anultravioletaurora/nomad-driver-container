@@ -29,15 +29,15 @@ job "nginx" {
         ports = ["http"]
 
         # Inject environment variables into the container.
-        env = {
+        env {
           NGINX_HOST = "localhost"
           NGINX_PORT = "80"
         }
 
         # Add runtime metadata labels.
-        labels = {
-          "app"     = "nginx"
-          "env"     = "dev"
+        labels {
+          app = "nginx"
+          env = "dev"
         }
 
         # Run a minimal init process to forward signals and reap zombies.

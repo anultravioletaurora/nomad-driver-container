@@ -95,7 +95,7 @@ var taskConfigSpec = hclspec.NewObject(map[string]*hclspec.Spec{
 
 	// env sets extra environment variables inside the container.
 	// Nomad's runtime environment variables are always injected first.
-	"env": hclspec.NewAttr("env", "map(string)", false),
+	"env": hclspec.NewBlockAttrs("env", "string", false),
 
 	// volumes is a list of host:container[:options] bind-mount specs.
 	// Requires volumes.enabled = true in the plugin configuration.
@@ -120,7 +120,7 @@ var taskConfigSpec = hclspec.NewObject(map[string]*hclspec.Spec{
 	"user": hclspec.NewAttr("user", "string", false),
 
 	// labels sets key=value metadata labels on the container.
-	"labels": hclspec.NewAttr("labels", "map(string)", false),
+	"labels": hclspec.NewBlockAttrs("labels", "string", false),
 
 	// cap_add adds Linux capabilities to the container process
 	// (e.g. "NET_ADMIN", "SYS_TIME").
