@@ -144,6 +144,15 @@ make dev
 
 ## Installation
 
+### Automated
+
+[**Nomadintosh**](https://github.com/anultravioletaurora/Nomadintosh) provides
+a fully automated install for macOS using Homebrew and Ansible. It installs
+Nomad, the Apple container CLI, and this driver in one step — the quickest way
+to get a working cluster on Apple Silicon.
+
+### Manual
+
 1. Build or download the `nomad-driver-container` binary.
 2. Place it in the Nomad `plugin_dir` on each macOS client node.
 3. Add the plugin configuration block to your Nomad client config (see below).
