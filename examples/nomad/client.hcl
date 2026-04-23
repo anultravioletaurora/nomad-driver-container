@@ -17,7 +17,7 @@ client {
 plugin "nomad-driver-container" {
   config {
     # Path to the Apple container CLI.  Default: /usr/local/bin/container
-    container_path = "/usr/local/bin/container"
+    container_path = "/opt/homebrew/bin/container"
 
     # Remove containers from the system when their Nomad tasks exit.
     gc {
