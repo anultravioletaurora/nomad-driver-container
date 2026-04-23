@@ -21,6 +21,7 @@ import (
 	"github.com/hashicorp/nomad/drivers/shared/eventer"
 	"github.com/hashicorp/nomad/plugins/base"
 	"github.com/hashicorp/nomad/plugins/drivers"
+	"github.com/hashicorp/nomad/plugins/drivers/fsisolation"
 	"github.com/hashicorp/nomad/plugins/shared/hclspec"
 
 	drv_version "github.com/hashicorp/nomad-driver-container/version"
@@ -56,7 +57,7 @@ var pluginInfo = &base.PluginInfoResponse{
 var capabilities = &drivers.Capabilities{
 	SendSignals: true,
 	Exec:        true,
-	FSIsolation: drivers.FSIsolationImage,
+	FSIsolation: fsisolation.Image,
 	NetIsolationModes: []drivers.NetIsolationMode{
 		drivers.NetIsolationModeHost,
 		drivers.NetIsolationModeGroup,
