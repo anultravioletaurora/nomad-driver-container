@@ -22,6 +22,26 @@ on:
 permissions:
   contents: write   # needed to create tags and releases
 
+# ---------------------------------------------------------------------------
+# Required GitHub secrets for code signing (set in repo Settings → Secrets):
+#
+#   MACOS_CERTIFICATE        — base64-encoded .p12 exported from Keychain:
+#                              security export -t identities -f pkcs12 \
+#                                -k ~/Library/Keychains/login.keychain-db \
+#                                -o cert.p12
+#                              base64 -i cert.p12 | pbcopy
+#
+#   MACOS_CERTIFICATE_PWD    — the password you set when exporting the .p12
+#
+#   MACOS_SIGNING_IDENTITY   — the full identity string, e.g.:
+#                              "Developer ID Application: Violet Caulfield (TEAMID)"
+#                              (or "Apple Development: ..." for local/dev use)
+#
+# For Gatekeeper-free distribution on other Macs you need a
+# "Developer ID Application" certificate from developer.apple.com.
+# These secrets are required — the build will fail if they are not set.
+# ---------------------------------------------------------------------------
+
 jobs:
   build-and-release:
     name: Build and publish pre-release
@@ -83,6 +103,58 @@ jobs:
             -X github.com/hashicorp/nomad-driver-container/version.Version=${{ steps.ver.outputs.VERSION }} \
             -X github.com/hashicorp/nomad-driver-container/version.VersionPreRelease=${{ steps.ver.outputs.PRE }}"
           go build -ldflags "$LDFLAGS" -trimpath -o build/nomad-driver-container .
+
+      # ── Code sign ─────────────────────────────────────────────────────────
+      #
+      # Skipped automatically when MACOS_CERTIFICATE is not set.
+      # Uses a short-lived keychain that is deleted after signing so the cert
+      # never persists on the runner.
+      - name: Import signing certificate
+        env:
+          CERTIFICATE_B64: ${{ secrets.MACOS_CERTIFICATE }}
+          CERTIFICATE_PWD: ${{ secrets.MACOS_CERTIFICATE_PWD }}
+        run: |
+          KEYCHAIN_PATH="$RUNNER_TEMP/signing.keychain-db"
+          KEYCHAIN_PWD=$(openssl rand -hex 16)
+
+          # Decode cert
+          echo "$CERTIFICATE_B64" | base64 --decode > "$RUNNER_TEMP/cert.p12"
+
+          # Create a temporary keychain and import
+          security create-keychain -p "$KEYCHAIN_PWD" "$KEYCHAIN_PATH"
+          security set-keychain-settings -lut 900 "$KEYCHAIN_PATH"
+          security unlock-keychain -p "$KEYCHAIN_PWD" "$KEYCHAIN_PATH"
+          security import "$RUNNER_TEMP/cert.p12" \
+            -k "$KEYCHAIN_PATH" \
+            -P "$CERTIFICATE_PWD" \
+            -T /usr/bin/codesign
+          security set-key-partition-list \
+            -S apple-tool:,apple: \
+            -s -k "$KEYCHAIN_PWD" "$KEYCHAIN_PATH"
+
+          # Make this keychain searchable by codesign
+          security list-keychains -d user -s "$KEYCHAIN_PATH" $(security list-keychains -d user | tr -d '"')
+
+          # Persist path for subsequent steps
+          echo "KEYCHAIN_PATH=$KEYCHAIN_PATH" >> "$GITHUB_ENV"
+
+      - name: Sign binary
+        env:
+          SIGNING_IDENTITY: ${{ secrets.MACOS_SIGNING_IDENTITY }}
+        run: |
+          codesign \
+            --sign "$SIGNING_IDENTITY" \
+            --options runtime \
+            --entitlements entitlements.plist \
+            --timestamp \
+            --force \
+            build/nomad-driver-container
+          codesign --verify --strict --verbose=2 build/nomad-driver-container
+
+      - name: Remove signing keychain
+        if: always()
+        run: |
+          security delete-keychain "$KEYCHAIN_PATH" || true
 
       # ── Create the tag ────────────────────────────────────────────────────
       #
