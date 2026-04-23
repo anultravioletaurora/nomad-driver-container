@@ -22,10 +22,12 @@ func main() {
 
 	// Serve the plugin.  This call blocks until the plugin process is killed
 	// or the parent Nomad client terminates.
+	d := NewDriver(logger)
 	goplugin.Serve(&goplugin.ServeConfig{
 		HandshakeConfig: base.Handshake,
 		Plugins: map[string]goplugin.Plugin{
-			base.PluginTypeDriver: drivers.NewDriverPlugin(NewDriver(logger), logger),
+			base.PluginTypeBase:   &base.PluginBase{Impl: d},
+			base.PluginTypeDriver: drivers.NewDriverPlugin(d, logger),
 		},
 		GRPCServer: goplugin.DefaultGRPCServer,
 		Logger:     logger,
