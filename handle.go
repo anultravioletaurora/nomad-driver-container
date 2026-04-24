@@ -117,14 +117,14 @@ func (h *taskHandle) runWaitLoop(inspectFn func(name string) (*inspectData, erro
 			return
 		}
 
-		switch info.State.Status {
+		switch info.Status {
 		case "running", "starting":
 			// Still alive – keep polling.
 			continue
 		default:
 			// Any other status (stopped, exited, dead, etc.) means done.
 			h.setExitResult(&drivers.ExitResult{
-				ExitCode: info.State.ExitCode,
+					ExitCode: info.ExitCode,
 			})
 			return
 		}

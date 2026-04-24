@@ -259,24 +259,17 @@ type TaskConfig struct {
 	Virtualization   bool              `codec:"virtualization"`
 }
 
-// inspectState represents the container status inside a container inspect
-// JSON response.
-//
-// NOTE: Field names are best-guess mappings against Apple's container CLI
-// output. Adjust to match the actual `container inspect` JSON schema once
-// confirmed against a running system.
-type inspectState struct {
-	Status   string `json:"status"` // "running", "stopped", "exited"
-	ExitCode int    `json:"exitCode"`
-	Pid      int    `json:"pid"`
+// inspectConfiguration is the nested configuration object in container inspect output.
+type inspectConfiguration struct {
+	ID string `json:"id"`
 }
 
 // inspectData is the top-level object returned by `container inspect <name>`.
+// Schema confirmed against Apple container CLI 0.11.0 output.
 type inspectData struct {
-	ID    string       `json:"id"`
-	Name  string       `json:"name"`
-	State inspectState `json:"state"`
-	Image string       `json:"image"`
+	Configuration inspectConfiguration `json:"configuration"`
+	Status        string               `json:"status"`   // "running", "stopped", "exited"
+	ExitCode      int                  `json:"exitCode"` // set when container has stopped
 }
 
 // statsData is an element in the JSON array returned by

@@ -531,11 +531,11 @@ func (d *Driver) RecoverTask(handle *drivers.TaskHandle) error {
 		cancel:     taskCancel,
 	}
 
-	if info.State.Status == "running" {
+	if info.Status == "running" {
 		h.procState = drivers.TaskStateRunning
 	} else {
 		h.procState = drivers.TaskStateExited
-		h.exitResult = &drivers.ExitResult{ExitCode: info.State.ExitCode}
+		h.exitResult = &drivers.ExitResult{ExitCode: info.ExitCode}
 		h.completedAt = time.Now()
 	}
 

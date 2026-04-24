@@ -49,8 +49,9 @@ job "nginx" {
         # ]
 
         # Capabilities: drop all unused capabilities for least-privilege.
-        cap_drop = ["ALL"]
-        cap_add  = ["CHOWN", "SETUID", "SETGID", "NET_BIND_SERVICE"]
+        # Requires container CLI ≥ 0.11.0.
+        # cap_drop = ["ALL"]
+        # cap_add  = ["CHOWN", "SETUID", "SETGID", "NET_BIND_SERVICE"]
 
         # Enable Rosetta 2 to run x86_64 images on Apple Silicon.
         # rosetta = true

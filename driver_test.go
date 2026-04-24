@@ -776,36 +776,31 @@ func TestBuildRunArgs_Labels(t *testing.T) {
 
 func TestInspectData_Object(t *testing.T) {
 	data := []byte(`{
-		"id": "abc123",
-		"name": "nomad-web-abc12345",
-		"state": {"status": "running", "exitCode": 0, "pid": 42},
-		"image": "nginx:latest"
+		"configuration": {"id": "abc123"},
+		"status": "running"
 	}`)
 	var info inspectData
 	if err := json.Unmarshal(data, &info); err != nil {
 		t.Fatalf("json.Unmarshal error: %v", err)
 	}
-	if info.ID != "abc123" {
-		t.Errorf("ID = %q; want abc123", info.ID)
+	if info.Configuration.ID != "abc123" {
+		t.Errorf("Configuration.ID = %q; want abc123", info.Configuration.ID)
 	}
-	if info.State.Status != "running" {
-		t.Errorf("State.Status = %q; want running", info.State.Status)
-	}
-	if info.State.Pid != 42 {
-		t.Errorf("State.Pid = %v; want 42", info.State.Pid)
+	if info.Status != "running" {
+		t.Errorf("Status = %q; want running", info.Status)
 	}
 }
 
 func TestInspectData_Exited(t *testing.T) {
-	data := []byte(`{"id":"x","name":"c","state":{"status":"stopped","exitCode":1},"image":"alpine"}`)
+	data := []byte(`{"configuration":{"id":"x"},"status":"stopped","exitCode":1}`)
 	var info inspectData
 	if err := json.Unmarshal(data, &info); err != nil {
 		t.Fatalf("json.Unmarshal error: %v", err)
 	}
-	if info.State.Status != "stopped" {
-		t.Errorf("State.Status = %q; want stopped", info.State.Status)
+	if info.Status != "stopped" {
+		t.Errorf("Status = %q; want stopped", info.Status)
 	}
-	if info.State.ExitCode != 1 {
-		t.Errorf("State.ExitCode = %v; want 1", info.State.ExitCode)
+	if info.ExitCode != 1 {
+		t.Errorf("ExitCode = %v; want 1", info.ExitCode)
 	}
 }
