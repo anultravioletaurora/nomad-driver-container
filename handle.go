@@ -124,7 +124,7 @@ func (h *taskHandle) runWaitLoop(inspectFn func(name string) (*inspectData, erro
 		default:
 			// Any other status (stopped, exited, dead, etc.) means done.
 			h.setExitResult(&drivers.ExitResult{
-					ExitCode: info.ExitCode,
+				ExitCode: info.ExitCode,
 			})
 			return
 		}

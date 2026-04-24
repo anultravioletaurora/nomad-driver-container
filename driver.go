@@ -85,8 +85,8 @@ type Driver struct {
 	logger hclog.Logger
 
 	// ctx and signalShutdown are used to stop the driver cleanly.
-	ctx             context.Context
-	signalShutdown  context.CancelFunc
+	ctx            context.Context
+	signalShutdown context.CancelFunc
 }
 
 // NewDriver creates a new instance of the Container driver.
@@ -386,26 +386,42 @@ func (d *Driver) DestroyTask(taskID string, force bool) error {
 
 // InspectTask returns the current status of a task.
 func (d *Driver) InspectTask(taskID string) (*drivers.TaskStatus, error) {
-	h, ok := d.tasks.Get(taskID)
-	if !ok {
-		return nil, drivers.ErrTaskNotFound
-	}
+       h, ok := d.tasks.Get(taskID)
+       if !ok {
+	       return nil, drivers.ErrTaskNotFound
+       }
 
-	h.stateLock.RLock()
-	defer h.stateLock.RUnlock()
+       h.stateLock.RLock()
+       defer h.stateLock.RUnlock()
 
-	status := &drivers.TaskStatus{
-		ID:          taskID,
-		Name:        h.taskConfig.Name,
-		State:       h.procState,
-		StartedAt:   h.startedAt,
-		CompletedAt: h.completedAt,
-		ExitResult:  h.exitResult,
-		DriverAttributes: map[string]string{
-			"container_name": h.containerName,
-		},
-	}
-	return status, nil
+       // Get container CLI version (best effort)
+       cliVersion := "unknown"
+       if out, err := exec.Command(d.containerPath(), "system", "version", "--format", "json").Output(); err == nil {
+	       var ver versionOutput
+	       if json.Unmarshal(out, &ver) == nil && ver.Version != "" {
+		       cliVersion = ver.Version
+	       }
+       }
+
+       attrs := map[string]string{
+	       "container_name":      h.containerName,
+	       "container_cli_path":  d.containerPath(),
+	       "container_cli_version": cliVersion,
+	       "image_pull_timeout":  d.config.ImagePullTimeout,
+	       "gc_container":        strconv.FormatBool(d.config.GC.Container),
+	       "volumes_enabled":     strconv.FormatBool(d.config.Volumes.Enabled),
+       }
+
+       status := &drivers.TaskStatus{
+	       ID:          taskID,
+	       Name:        h.taskConfig.Name,
+	       State:       h.procState,
+	       StartedAt:   h.startedAt,
+	       CompletedAt: h.completedAt,
+	       ExitResult:  h.exitResult,
+	       DriverAttributes: attrs,
+       }
+       return status, nil
 }
 
 // TaskStats returns a channel that sends resource usage statistics at the
@@ -935,4 +951,3 @@ func matchGlob(pattern, s string) (bool, error) {
 	pattern = strings.ReplaceAll(regexp.QuoteMeta(pattern), `\*`, `.*`)
 	return regexp.MatchString("^"+pattern+"$", s)
 }
-
