@@ -110,14 +110,6 @@ performance on Apple Silicon.
 | Nomad | ≥ 1.8.0 |
 | Go (to build) | ≥ 1.22 |
 
-Install the Apple container CLI from the
-[releases page](https://github.com/apple/container/releases) and start the
-system service:
-
-```sh
-container system start
-```
-
 ---
 
 ## Building from source
@@ -153,10 +145,23 @@ to get a working cluster on Apple Silicon.
 
 ### Manual
 
-1. Build or download the `nomad-driver-container` binary.
-2. Place it in the Nomad `plugin_dir` on each macOS client node.
-3. Add the plugin configuration block to your Nomad client config (see below).
-4. Restart the Nomad client.
+1. Install the Apple container CLI from the
+[releases page](https://github.com/apple/container/releases) or from Homebrew:
+
+```sh
+brew install container
+```
+
+2. Start the Container system service:
+
+```sh
+container system start
+```
+
+3. Build or download the `nomad-driver-container` binary.
+4. Place it in the Nomad `plugin_dir` on each macOS client node.
+5. Add the plugin configuration block to your Nomad client config (see below).
+6. Restart the Nomad client.
 
 ---
 
@@ -377,4 +382,4 @@ nomad alloc exec <ALLOC_ID> /bin/sh
 
 ## License
 
-[MPL-2.0](LICENSE)
+[GPL-3.0](LICENSE)
