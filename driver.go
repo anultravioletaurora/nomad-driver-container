@@ -902,7 +902,8 @@ func statsToTaskResourceUsage(s *statsData) *cstructs.TaskResourceUsage {
 			MemoryStats: &cstructs.MemoryStats{
 				RSS:      s.MemUsage,
 				Usage:    s.MemUsage,
-				Measured: []string{"RSS", "Usage"},
+				MaxUsage: s.MemLimit,
+				Measured: []string{"RSS", "Usage", "Max Usage"},
 			},
 			CpuStats: &cstructs.CpuStats{
 				Percent:  s.CPUPercent,

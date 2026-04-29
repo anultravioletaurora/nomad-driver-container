@@ -274,20 +274,18 @@ type inspectData struct {
 
 // statsData is an element in the JSON array returned by
 // `container stats --no-stream --format json`.
-//
-// NOTE: Field names are best-guess mappings. Adjust once confirmed against a
-// running system.
 type statsData struct {
-	ID          string  `json:"id"`
-	Name        string  `json:"name"`
-	CPUPercent  float64 `json:"cpu_percent"`
-	MemUsage    uint64  `json:"mem_usage"`
-	MemLimit    uint64  `json:"mem_limit"`
-	NetInput    uint64  `json:"net_input"`
-	NetOutput   uint64  `json:"net_output"`
-	BlockInput  uint64  `json:"block_input"`
-	BlockOutput uint64  `json:"block_output"`
-	PIDs        uint64  `json:"pids"`
+	ID           string  `json:"id"`
+	Name         string  `json:"name"`         // may be absent in practice
+	CPUUsageUsec uint64  `json:"cpuUsageUsec"` // cumulative CPU microseconds
+	CPUPercent   float64 `json:"-"`            // computed from delta, not in JSON
+	MemUsage     uint64  `json:"memoryUsageBytes"`
+	MemLimit     uint64  `json:"memoryLimitBytes"`
+	NetInput     uint64  `json:"networkRxBytes"`
+	NetOutput    uint64  `json:"networkTxBytes"`
+	BlockInput   uint64  `json:"blockReadBytes"`
+	BlockOutput  uint64  `json:"blockWriteBytes"`
+	PIDs         uint64  `json:"numProcesses"`
 }
 
 // versionOutput is (a subset of) the JSON returned by

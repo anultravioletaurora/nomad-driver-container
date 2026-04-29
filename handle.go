@@ -52,6 +52,12 @@ type taskHandle struct {
 	// ctx is cancelled when StopTask / DestroyTask is called.
 	ctx    context.Context
 	cancel context.CancelFunc
+
+	// prevCPUUsec and prevCPUSampleAt track the previous container stats
+	// sample so that sampleStats can compute a CPU utilisation percentage
+	// from the cumulative cpuUsageUsec value returned by `container stats`.
+	prevCPUUsec     uint64
+	prevCPUSampleAt time.Time
 }
 
 // ExitResult returns the container's exit result.  Blocks until the container
@@ -208,6 +214,21 @@ func (h *taskHandle) sampleStats() (*cstructs.TaskResourceUsage, error) {
 	if err != nil {
 		return nil, err
 	}
+
+	// Compute CPU percent from the delta of cumulative CPU microseconds.
+	now := time.Now()
+	if !h.prevCPUSampleAt.IsZero() {
+		elapsedUsec := now.Sub(h.prevCPUSampleAt).Microseconds()
+		if elapsedUsec > 0 {
+			delta := int64(stats.CPUUsageUsec) - int64(h.prevCPUUsec)
+			if delta < 0 {
+				delta = 0
+			}
+			stats.CPUPercent = float64(delta) / float64(elapsedUsec) * 100
+		}
+	}
+	h.prevCPUUsec = stats.CPUUsageUsec
+	h.prevCPUSampleAt = now
 
 	return statsToTaskResourceUsage(stats), nil
 }
