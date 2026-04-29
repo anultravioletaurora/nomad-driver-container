@@ -107,15 +107,15 @@ func TestSanitizeLabel(t *testing.T) {
 
 func TestParseStats_JSONArray_MatchByName(t *testing.T) {
 	data := []byte(`[
-		{"id":"id1","name":"other","cpu_percent":1.0,"mem_usage":100},
-		{"id":"id2","name":"my-container","cpu_percent":12.5,"mem_usage":1048576}
+		{"id":"id1","name":"other","cpuUsageUsec":1000000,"memoryUsageBytes":100},
+		{"id":"id2","name":"my-container","cpuUsageUsec":9254258,"memoryUsageBytes":1048576}
 	]`)
 	s, err := parseStats(data, "my-container")
 	if err != nil {
 		t.Fatalf("parseStats() error = %v", err)
 	}
-	if s.CPUPercent != 12.5 {
-		t.Errorf("CPUPercent = %v; want 12.5", s.CPUPercent)
+	if s.CPUUsageUsec != 9254258 {
+		t.Errorf("CPUUsageUsec = %v; want 9254258", s.CPUUsageUsec)
 	}
 	if s.MemUsage != 1048576 {
 		t.Errorf("MemUsage = %v; want 1048576", s.MemUsage)
@@ -123,7 +123,7 @@ func TestParseStats_JSONArray_MatchByName(t *testing.T) {
 }
 
 func TestParseStats_JSONArray_MatchByID(t *testing.T) {
-	data := []byte(`[{"id":"target-id","name":"c","cpu_percent":5.0,"mem_usage":2048}]`)
+	data := []byte(`[{"id":"target-id","name":"c","cpuUsageUsec":5000000,"memoryUsageBytes":2048}]`)
 	s, err := parseStats(data, "target-id")
 	if err != nil {
 		t.Fatalf("parseStats() error = %v", err)
@@ -134,7 +134,7 @@ func TestParseStats_JSONArray_MatchByID(t *testing.T) {
 }
 
 func TestParseStats_JSONArray_NoMatch_ReturnFirst(t *testing.T) {
-	data := []byte(`[{"id":"id1","name":"c1","cpu_percent":1.0,"mem_usage":100}]`)
+	data := []byte(`[{"id":"id1","name":"c1","cpuUsageUsec":1000000,"memoryUsageBytes":100}]`)
 	s, err := parseStats(data, "nonexistent")
 	if err != nil {
 		t.Fatalf("parseStats() error = %v", err)
@@ -146,13 +146,13 @@ func TestParseStats_JSONArray_NoMatch_ReturnFirst(t *testing.T) {
 }
 
 func TestParseStats_JSONObject(t *testing.T) {
-	data := []byte(`{"id":"abc","name":"my-container","cpu_percent":5.0,"mem_usage":2097152}`)
+	data := []byte(`{"id":"abc","name":"my-container","cpuUsageUsec":5000000,"memoryUsageBytes":2097152}`)
 	s, err := parseStats(data, "my-container")
 	if err != nil {
 		t.Fatalf("parseStats() error = %v", err)
 	}
-	if s.CPUPercent != 5.0 {
-		t.Errorf("CPUPercent = %v; want 5.0", s.CPUPercent)
+	if s.CPUUsageUsec != 5000000 {
+		t.Errorf("CPUUsageUsec = %v; want 5000000", s.CPUUsageUsec)
 	}
 }
 
@@ -174,9 +174,10 @@ func TestParseStats_InvalidJSON(t *testing.T) {
 
 func TestStatsToTaskResourceUsage(t *testing.T) {
 	s := &statsData{
-		Name:       "c",
+		ID:         "c",
 		CPUPercent: 42.0,
 		MemUsage:   512,
+		MemLimit:   1073741824,
 	}
 	u := statsToTaskResourceUsage(s)
 	if u.ResourceUsage.CpuStats.Percent != 42.0 {
@@ -187,6 +188,9 @@ func TestStatsToTaskResourceUsage(t *testing.T) {
 	}
 	if u.ResourceUsage.MemoryStats.Usage != 512 {
 		t.Errorf("MemoryStats.Usage = %v; want 512", u.ResourceUsage.MemoryStats.Usage)
+	}
+	if u.ResourceUsage.MemoryStats.MaxUsage != 1073741824 {
+		t.Errorf("MemoryStats.MaxUsage = %v; want 1073741824", u.ResourceUsage.MemoryStats.MaxUsage)
 	}
 	if u.Timestamp == 0 {
 		t.Error("Timestamp should not be zero")
