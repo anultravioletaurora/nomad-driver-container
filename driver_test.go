@@ -790,7 +790,7 @@ func TestInspectData_Object(t *testing.T) {
 	if info.Configuration.ID != "abc123" {
 		t.Errorf("Configuration.ID = %q; want abc123", info.Configuration.ID)
 	}
-	if info.Status != "running" {
+	if info.Status.State != "running" {
 		t.Errorf("Status = %q; want running", info.Status)
 	}
 }
@@ -801,7 +801,7 @@ func TestInspectData_Exited(t *testing.T) {
 	if err := json.Unmarshal(data, &info); err != nil {
 		t.Fatalf("json.Unmarshal error: %v", err)
 	}
-	if info.Status != "stopped" {
+	if info.Status.State != "stopped" {
 		t.Errorf("Status = %q; want stopped", info.Status)
 	}
 	if info.ExitCode != 1 {

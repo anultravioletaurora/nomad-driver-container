@@ -145,9 +145,13 @@ func TestRunWaitLoop_ContainerExitsNormally(t *testing.T) {
 	inspectFn := func(name string) (*inspectData, error) {
 		callCount++
 		if callCount < 3 {
-			return &inspectData{Status: "running"}, nil
+			return &inspectData{
+				Status: StatusDetail{State: "running"},
+			}, nil
 		}
-		return &inspectData{Status: "stopped", ExitCode: 0}, nil
+		return &inspectData{
+				Status: StatusDetail{State: "stopped"},
+			}, nil
 	}
 
 	go h.runWaitLoop(inspectFn)
@@ -171,7 +175,7 @@ func TestRunWaitLoop_ContainerExitsWithNonZeroCode(t *testing.T) {
 	h := newTestHandle()
 
 	inspectFn := func(name string) (*inspectData, error) {
-		return &inspectData{Status: "exited", ExitCode: 1}, nil
+		return &inspectData{ExitCode: 1, Status: StatusDetail{State: "exited"}}, nil
 	}
 
 	go h.runWaitLoop(inspectFn)
@@ -193,7 +197,7 @@ func TestRunWaitLoop_ContextCancelled(t *testing.T) {
 
 	// inspectFn always returns "running" — exit must come from cancellation.
 	inspectFn := func(name string) (*inspectData, error) {
-		return &inspectData{Status: "running"}, nil
+		return &inspectData{Status: StatusDetail{State:"running"}}, nil
 	}
 
 	go h.runWaitLoop(inspectFn)
@@ -250,9 +254,9 @@ func TestRunWaitLoop_StartingStatus_KeepsPolling(t *testing.T) {
 	inspectFn := func(name string) (*inspectData, error) {
 		callCount++
 		if callCount < 3 {
-			return &inspectData{Status: "starting"}, nil
+			return &inspectData{Status: StatusDetail{State:"starting"}}, nil
 		}
-		return &inspectData{Status: "running", ExitCode: 0}, nil
+		return &inspectData{Status: StatusDetail{State:"running"}, ExitCode: 0}, nil
 	}
 
 	go h.runWaitLoop(inspectFn)
@@ -279,7 +283,7 @@ func TestRunWaitLoop_DoneCh_ClosedExactlyOnce(t *testing.T) {
 	h := newTestHandle()
 
 	inspectFn := func(name string) (*inspectData, error) {
-		return &inspectData{Status: "stopped"}, nil
+		return &inspectData{Status: StatusDetail{State:"stopped"}}, nil
 	}
 
 	go h.runWaitLoop(inspectFn)
