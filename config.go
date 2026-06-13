@@ -264,7 +264,7 @@ type inspectConfiguration struct {
 	ID string `json:"id"`
 }
 
-type StatusDetail struct {
+type statusDetail struct {
 	State string `json:"state"` // "running", "stopped", "exited"
 }
 
@@ -272,7 +272,7 @@ type StatusDetail struct {
 // Schema confirmed against Apple container CLI 1.0.0_1 output.
 type inspectData struct {
 	Configuration inspectConfiguration `json:"configuration"`
-	Status        StatusDetail 			`json:"status"`   
+	Status        statusDetail 			`json:"status"`   
 	ExitCode      int		   			`json:"exitCode"` // set when container has stopped
 }
 
