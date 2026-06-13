@@ -781,7 +781,9 @@ func TestBuildRunArgs_Labels(t *testing.T) {
 func TestInspectData_Object(t *testing.T) {
 	data := []byte(`{
 		"configuration": {"id": "abc123"},
-		"status": "running"
+		"status": {
+			"state": "running"
+		}
 	}`)
 	var info inspectData
 	if err := json.Unmarshal(data, &info); err != nil {
@@ -790,18 +792,18 @@ func TestInspectData_Object(t *testing.T) {
 	if info.Configuration.ID != "abc123" {
 		t.Errorf("Configuration.ID = %q; want abc123", info.Configuration.ID)
 	}
-	if info.Status != "running" {
+	if info.Status.State != "running" {
 		t.Errorf("Status = %q; want running", info.Status)
 	}
 }
 
 func TestInspectData_Exited(t *testing.T) {
-	data := []byte(`{"configuration":{"id":"x"},"status":"stopped","exitCode":1}`)
+	data := []byte(`{"configuration":{"id":"x"},"status":{"state": "stopped"},"exitCode":1}`)
 	var info inspectData
 	if err := json.Unmarshal(data, &info); err != nil {
 		t.Fatalf("json.Unmarshal error: %v", err)
 	}
-	if info.Status != "stopped" {
+	if info.Status.State != "stopped" {
 		t.Errorf("Status = %q; want stopped", info.Status)
 	}
 	if info.ExitCode != 1 {

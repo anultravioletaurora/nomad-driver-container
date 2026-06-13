@@ -200,7 +200,7 @@ jobs:
             ### Requirements
             - Apple Silicon Mac (M1/M2/M3/M4)
             - macOS 26 (Sequoia) or later
-            - [Apple container CLI](https://github.com/apple/container/releases) ≥ 0.11.0
+            - [Apple container CLI](https://github.com/apple/container/releases) ≥ 1.0.0_1
             - Nomad ≥ 1.8.0
 
             ### Installation

@@ -5,7 +5,7 @@ package version
 
 var (
 	// Version is the current release version.
-	Version = "0.2.0"
+	Version = "0.3.0"
 
 	// VersionPreRelease is a pre-release marker ("dev", "beta1", etc.).
 	// If this is "" then it means that it is a final release. Otherwise,

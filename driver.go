@@ -547,7 +547,7 @@ func (d *Driver) RecoverTask(handle *drivers.TaskHandle) error {
 		cancel:     taskCancel,
 	}
 
-	if info.Status == "running" {
+	if info.Status.State == "running" {
 		h.procState = drivers.TaskStateRunning
 	} else {
 		h.procState = drivers.TaskStateExited

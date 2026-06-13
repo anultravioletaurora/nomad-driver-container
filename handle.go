@@ -123,7 +123,7 @@ func (h *taskHandle) runWaitLoop(inspectFn func(name string) (*inspectData, erro
 			return
 		}
 
-		switch info.Status {
+		switch info.Status.State {
 		case "running", "starting":
 			// Still alive – keep polling.
 			continue
