@@ -7,6 +7,10 @@ GO          := go
 BINARY_NAME := nomad-driver-container
 BUILD_DIR   := ./build
 
+# Build without cgo: Nomad's plugin SDK pulls in go-m1cpu, whose cgo
+# initialiser segfaults at startup on macOS 27.
+export CGO_ENABLED ?= 0
+
 LDFLAGS := -X github.com/hashicorp/nomad-driver-container/version.Version=$(shell cat version/version.go | grep 'Version =' | head -1 | awk '{print $$3}' | tr -d '"') \
            -X github.com/hashicorp/nomad-driver-container/version.VersionPreRelease=$(shell cat version/version.go | grep 'VersionPreRelease =' | head -1 | awk '{print $$3}' | tr -d '"')
 
