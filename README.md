@@ -104,11 +104,13 @@ performance on Apple Silicon.
 
 | Requirement | Version |
 |---|---|
-| macOS | 26 (Sequoia) or later |
+| macOS | 26 (Tahoe) or later |
 | Hardware | Apple Silicon (M1 / M2 / M3 / M4 series) |
 | Apple container CLI | ≥ 0.11.0 |
 | Nomad | ≥ 1.8.0 |
-| Go (to build) | ≥ 1.22 |
+| Go (to build) | ≥ 1.25 |
+
+Currently tested against **container 1.7.1** on **macOS 27 (Golden Gate)**.
 
 ---
 
@@ -204,6 +206,31 @@ plugin "nomad-driver-container" {
     #   server_address = "registry.example.com"
     # }
   }
+}
+```
+
+### Node attributes
+
+When the driver is healthy it fingerprints the container platform and sets
+these node attributes, which can be used in job `constraint` blocks:
+
+| Attribute | Example | Description |
+|---|---|---|
+| `driver.container` | `true` | The driver is detected and the container system service is running. |
+| `driver.container.path` | `/opt/homebrew/bin/container` | Path to the `container` CLI the driver uses. |
+| `driver.container.version` | `1.7.1` | Container platform version. |
+| `driver.container.app_name` | `container` | Platform app name. |
+| `driver.container.build_type` | `release` | Platform build type. |
+| `driver.container.commit` | `unspecified` | Platform build commit (`unspecified` on Homebrew release builds). |
+
+The version attributes come from `container system version --format json`;
+if that command fails or its output can't be parsed, they are omitted.
+
+```hcl
+constraint {
+  attribute = "${attr.driver.container.version}"
+  operator  = "semver"
+  value     = ">= 1.7.0"
 }
 ```
 

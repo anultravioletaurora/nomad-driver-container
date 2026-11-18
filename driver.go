@@ -202,29 +202,24 @@ func (d *Driver) buildFingerprint() *drivers.Fingerprint {
 
 	// 3. Collect container platform information.
 	attrs := map[string]*structs.Attribute{
-		"driver.container":      structs.NewStringAttribute("true"),
-		"driver.container_path": structs.NewStringAttribute(binPath),
+		"driver.container":      structs.NewBoolAttribute(true),
+		"driver.container.path": structs.NewStringAttribute(binPath),
 	}
 
 	version := "unknown"
-	if out, err := exec.Command(binPath, "system", "version", "--format", "json").Output(); err == nil {
-		// Parse as array (the expected format)
-		var verList []versionOutput
-		if json.Unmarshal(out, &verList) == nil && len(verList) > 0 {
-			ver := verList[0] // First entry is the main container platform
-			if ver.Version != "" {
-				version = ver.Version
-				attrs["driver.container.version"] = structs.NewStringAttribute(ver.Version)
-			}
-			if ver.AppName != "" {
-				attrs["driver.container.app_name"] = structs.NewStringAttribute(ver.AppName)
-			}
-			if ver.BuildType != "" {
-				attrs["driver.container.build_type"] = structs.NewStringAttribute(ver.BuildType)
-			}
-			if ver.Commit != "" {
-				attrs["driver.container.commit"] = structs.NewStringAttribute(ver.Commit)
-			}
+	if ver, ok := containerVersion(binPath); ok {
+		if ver.Version != "" {
+			version = ver.Version
+			attrs["driver.container.version"] = structs.NewStringAttribute(ver.Version)
+		}
+		if ver.AppName != "" {
+			attrs["driver.container.app_name"] = structs.NewStringAttribute(ver.AppName)
+		}
+		if ver.BuildType != "" {
+			attrs["driver.container.build_type"] = structs.NewStringAttribute(ver.BuildType)
+		}
+		if ver.Commit != "" {
+			attrs["driver.container.commit"] = structs.NewStringAttribute(ver.Commit)
 		}
 	}
 
@@ -233,6 +228,20 @@ func (d *Driver) buildFingerprint() *drivers.Fingerprint {
 		HealthDescription: fmt.Sprintf("container %s healthy", version),
 		Attributes:        attrs,
 	}
+}
+
+// containerVersion runs `container system version --format json` and returns
+// the first entry, which describes the container platform itself.
+func containerVersion(binPath string) (versionOutput, bool) {
+	out, err := exec.Command(binPath, "system", "version", "--format", "json").Output()
+	if err != nil {
+		return versionOutput{}, false
+	}
+	var verList []versionOutput
+	if json.Unmarshal(out, &verList) != nil || len(verList) == 0 {
+		return versionOutput{}, false
+	}
+	return verList[0], true
 }
 
 // StartTask validates a task configuration and starts the container.
@@ -417,14 +426,8 @@ func (d *Driver) InspectTask(taskID string) (*drivers.TaskStatus, error) {
 
 	// Get container CLI version (best effort)
 	cliVersion := "unknown"
-	if out, err := exec.Command(d.containerPath(), "system", "version", "--format", "json").Output(); err == nil {
-		// Parse as array (the expected format)
-		var verList []versionOutput
-		if json.Unmarshal(out, &verList) == nil && len(verList) > 0 {
-			if verList[0].Version != "" {
-				cliVersion = verList[0].Version
-			}
-		}
+	if ver, ok := containerVersion(d.containerPath()); ok && ver.Version != "" {
+		cliVersion = ver.Version
 	}
 
 	attrs := map[string]string{
