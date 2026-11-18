@@ -106,7 +106,7 @@ performance on Apple Silicon.
 |---|---|
 | macOS | 26 (Tahoe) or later |
 | Hardware | Apple Silicon (M1 / M2 / M3 / M4 series) |
-| Apple container CLI | ≥ 0.11.0 |
+| Apple container CLI | ≥ 1.0.0_1 |
 | Nomad | ≥ 1.8.0 |
 | Go (to build) | ≥ 1.25 |
 
