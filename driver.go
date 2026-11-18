@@ -23,6 +23,7 @@ import (
 	"github.com/hashicorp/nomad/plugins/drivers"
 	"github.com/hashicorp/nomad/plugins/drivers/fsisolation"
 	"github.com/hashicorp/nomad/plugins/shared/hclspec"
+	"github.com/hashicorp/nomad/plugins/shared/structs"
 
 	drv_version "github.com/hashicorp/nomad-driver-container/version"
 )
@@ -199,18 +200,38 @@ func (d *Driver) buildFingerprint() *drivers.Fingerprint {
 		}
 	}
 
-	// 3. Optionally collect the CLI version for the health description.
+	// 3. Collect container platform information.
+	attrs := map[string]*structs.Attribute{
+		"driver.container":      structs.NewStringAttribute("true"),
+		"driver.container_path": structs.NewStringAttribute(binPath),
+	}
+
 	version := "unknown"
 	if out, err := exec.Command(binPath, "system", "version", "--format", "json").Output(); err == nil {
-		var ver versionOutput
-		if json.Unmarshal(out, &ver) == nil && ver.Version != "" {
-			version = ver.Version
+		// Parse as array (the expected format)
+		var verList []versionOutput
+		if json.Unmarshal(out, &verList) == nil && len(verList) > 0 {
+			ver := verList[0] // First entry is the main container platform
+			if ver.Version != "" {
+				version = ver.Version
+				attrs["driver.container.version"] = structs.NewStringAttribute(ver.Version)
+			}
+			if ver.AppName != "" {
+				attrs["driver.container.app_name"] = structs.NewStringAttribute(ver.AppName)
+			}
+			if ver.BuildType != "" {
+				attrs["driver.container.build_type"] = structs.NewStringAttribute(ver.BuildType)
+			}
+			if ver.Commit != "" {
+				attrs["driver.container.commit"] = structs.NewStringAttribute(ver.Commit)
+			}
 		}
 	}
 
 	return &drivers.Fingerprint{
 		Health:            drivers.HealthStateHealthy,
 		HealthDescription: fmt.Sprintf("container %s healthy", version),
+		Attributes:        attrs,
 	}
 }
 
@@ -397,9 +418,12 @@ func (d *Driver) InspectTask(taskID string) (*drivers.TaskStatus, error) {
 	// Get container CLI version (best effort)
 	cliVersion := "unknown"
 	if out, err := exec.Command(d.containerPath(), "system", "version", "--format", "json").Output(); err == nil {
-		var ver versionOutput
-		if json.Unmarshal(out, &ver) == nil && ver.Version != "" {
-			cliVersion = ver.Version
+		// Parse as array (the expected format)
+		var verList []versionOutput
+		if json.Unmarshal(out, &verList) == nil && len(verList) > 0 {
+			if verList[0].Version != "" {
+				cliVersion = verList[0].Version
+			}
 		}
 	}
 
