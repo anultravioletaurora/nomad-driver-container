@@ -6,11 +6,11 @@
 #     correctness, or API compatibility.  Use at your own risk.
 #
 # Each run tags the release as:
-#   v<VERSION>-<PRE_RELEASE>+<short-sha>
-# e.g. v0.1.0-dev+abc1234
+#   v<VERSION>-<PRE_RELEASE>-<short-sha>
+# e.g. v0.4.0-dev-abc1234
 #
-# Because the plugin requires Apple Silicon + macOS 26, the only target
-# produced is darwin/arm64.
+# The plugin requires Apple Silicon + macOS 26 (Tahoe) or later, so the only
+# target produced is darwin/arm64.
 
 name: Release
 
@@ -39,21 +39,23 @@ permissions:
 #
 # For Gatekeeper-free distribution on other Macs you need a
 # "Developer ID Application" certificate from developer.apple.com.
-# These secrets are required — the build will fail if they are not set.
+# These secrets are required — the build fails if they are not set.
 # ---------------------------------------------------------------------------
 
 jobs:
   build-and-release:
     name: Build and publish pre-release
-    runs-on: macos-latest   # arm64 runner; darwin/arm64 CGO not needed here
+    runs-on: macos-latest   # arm64 runner
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
         with:
-          fetch-depth: 0   # full history so `git describe` works
+          fetch-depth: 0
 
       # ── Read version from source ──────────────────────────────────────────
+      #
+      # `+` is not valid in a git tag, so build metadata is joined with `-`.
       - name: Extract version
         id: ver
         run: |
@@ -64,15 +66,15 @@ jobs:
           SHA=$(git rev-parse --short HEAD)
 
           if [ -n "$PRE" ]; then
-            TAG="v${VERSION}-${PRE}+${SHA}"
+            TAG="v${VERSION}-${PRE}-${SHA}"
           else
-            TAG="v${VERSION}+${SHA}"
+            TAG="v${VERSION}-${SHA}"
           fi
 
-          echo "VERSION=$VERSION"   >> "$GITHUB_OUTPUT"
-          echo "PRE=$PRE"           >> "$GITHUB_OUTPUT"
-          echo "SHA=$SHA"           >> "$GITHUB_OUTPUT"
-          echo "TAG=$TAG"           >> "$GITHUB_OUTPUT"
+          echo "VERSION=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "PRE=$PRE"         >> "$GITHUB_OUTPUT"
+          echo "SHA=$SHA"         >> "$GITHUB_OUTPUT"
+          echo "TAG=$TAG"         >> "$GITHUB_OUTPUT"
           echo "Computed tag: $TAG"
 
       # ── Set up Go ─────────────────────────────────────────────────────────
@@ -82,16 +84,15 @@ jobs:
           go-version-file: go.mod
           cache: true
 
-      # ── Resolve dependencies ──────────────────────────────────────────────
-      # go.sum is not committed (scaffolded project), so tidy generates it.
-      - name: Tidy modules
-        run: go mod tidy
+      - name: Download modules
+        run: go mod download && go mod verify
 
       # ── Build darwin/arm64 binary ─────────────────────────────────────────
       #
-      # This plugin only works on macOS 26+ with Apple Silicon, so we build
-      # exclusively for darwin/arm64.  CGO is disabled because the driver
-      # shells out to the `container` CLI rather than linking against a C lib.
+      # CGO must stay disabled.  Nomad's plugin SDK pulls in
+      # github.com/shoenig/go-m1cpu, whose cgo initialiser segfaults at
+      # startup on macOS 27; the pure-Go build is unaffected.  The driver
+      # shells out to the `container` CLI, so it needs no C libraries.
       - name: Build (darwin/arm64)
         env:
           GOOS: darwin
@@ -106,7 +107,6 @@ jobs:
 
       # ── Code sign ─────────────────────────────────────────────────────────
       #
-      # Skipped automatically when MACOS_CERTIFICATE is not set.
       # Uses a short-lived keychain that is deleted after signing so the cert
       # never persists on the runner.
       - name: Import signing certificate
@@ -117,10 +117,8 @@ jobs:
           KEYCHAIN_PATH="$RUNNER_TEMP/signing.keychain-db"
           KEYCHAIN_PWD=$(openssl rand -hex 16)
 
-          # Decode cert
           echo "$CERTIFICATE_B64" | base64 --decode > "$RUNNER_TEMP/cert.p12"
 
-          # Create a temporary keychain and import
           security create-keychain -p "$KEYCHAIN_PWD" "$KEYCHAIN_PATH"
           security set-keychain-settings -lut 900 "$KEYCHAIN_PATH"
           security unlock-keychain -p "$KEYCHAIN_PWD" "$KEYCHAIN_PATH"
@@ -135,7 +133,6 @@ jobs:
           # Make this keychain searchable by codesign
           security list-keychains -d user -s "$KEYCHAIN_PATH" $(security list-keychains -d user | tr -d '"')
 
-          # Persist path for subsequent steps
           echo "KEYCHAIN_PATH=$KEYCHAIN_PATH" >> "$GITHUB_ENV"
 
       - name: Sign binary
@@ -156,18 +153,14 @@ jobs:
         run: |
           security delete-keychain "$KEYCHAIN_PATH" || true
 
-      # ── Create the tag ────────────────────────────────────────────────────
-      #
-      # `+` is not valid in a git tag; replace it with a hyphen.
+      # ── Tag ───────────────────────────────────────────────────────────────
       - name: Create and push tag
         run: |
           TAG="${{ steps.ver.outputs.TAG }}"
-          GIT_TAG="${TAG//+/-}"
-          echo "GIT_TAG=$GIT_TAG" >> "$GITHUB_ENV"
           git config user.name  "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git tag -a "$GIT_TAG" -m "Automated pre-release $GIT_TAG"
-          git push origin "$GIT_TAG"
+          git tag -a "$TAG" -m "Automated pre-release $TAG"
+          git push origin "$TAG"
 
       # ── Archive the binary ────────────────────────────────────────────────
       - name: Package binary
@@ -176,14 +169,13 @@ jobs:
           ARCHIVE="nomad-driver-container-darwin-arm64.tar.gz"
           tar -czf "$ARCHIVE" nomad-driver-container
           shasum -a 256 "$ARCHIVE" | tee "${ARCHIVE}.sha256"
-          echo "ARCHIVE=$ARCHIVE" >> "$GITHUB_ENV"
 
       # ── Publish the GitHub Release ────────────────────────────────────────
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: ${{ env.GIT_TAG }}
-          name: "${{ env.GIT_TAG }} (alpha)"
+          tag_name: ${{ steps.ver.outputs.TAG }}
+          name: "${{ steps.ver.outputs.TAG }} (alpha)"
           prerelease: true
           body: |
             ## ⚠️ Alpha — not guaranteed to work
@@ -199,9 +191,11 @@ jobs:
 
             ### Requirements
             - Apple Silicon Mac (M1/M2/M3/M4)
-            - macOS 26 (Sequoia) or later
+            - macOS 26 (Tahoe) or later
             - [Apple container CLI](https://github.com/apple/container/releases) ≥ 1.0.0_1
             - Nomad ≥ 1.8.0
+
+            Tested against container 1.7.1 on macOS 27 (Golden Gate) with Nomad 2.
 
             ### Installation
 

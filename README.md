@@ -8,6 +8,9 @@ Each container gets its own dedicated micro-VM backed by Apple's
 Virtualization framework, providing VM-level isolation with near-native
 performance on Apple Silicon.
 
+![Six rack-mounted Mac minis labelled orion, taurus, cassiopeia, galileo, hopper and lovelace](cluster.jpg)
+*The "cosmonautical" cluster this driver is developed and tested on.*
+
 ---
 
 ## Features
@@ -106,11 +109,11 @@ performance on Apple Silicon.
 |---|---|
 | macOS | 26 (Tahoe) or later |
 | Hardware | Apple Silicon (M1 / M2 / M3 / M4 series) |
-| Apple container CLI | ≥ 0.11.0 |
+| Apple container CLI | ≥ 1.0.0_1 |
 | Nomad | ≥ 1.8.0 |
 | Go (to build) | ≥ 1.25 |
 
-Currently tested against **container 1.7.1** on **macOS 27 (Golden Gate)**.
+Currently tested against **container 1.7.1** on **macOS 27 (Golden Gate)** with **Nomad 2**.
 
 ---
 
