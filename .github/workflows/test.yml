@@ -20,5 +20,10 @@ jobs:
           go-version-file: go.mod
           cache: true
 
+      # CGO must stay disabled: go-m1cpu (via Nomad's plugin SDK) segfaults at
+      # startup on macOS 27 when built with cgo.  The race detector on darwin
+      # doesn't need cgo.
       - name: Run tests
+        env:
+          CGO_ENABLED: "0"
         run: go test -race -count=1 ./...
