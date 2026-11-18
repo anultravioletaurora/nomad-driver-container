@@ -195,7 +195,7 @@ jobs:
             - [Apple container CLI](https://github.com/apple/container/releases) ≥ 1.0.0_1
             - Nomad ≥ 1.8.0
 
-            Tested against container 1.7.1 on macOS 27 (Golden Gate).
+            Tested against container 1.7.1 on macOS 27 (Golden Gate) with Nomad 2.
 
             ### Installation
 
