@@ -1,4 +1,4 @@
-module github.com/hashicorp/nomad-driver-container
+module github.com/anultravioletaurora/nomad-driver-container
 
 go 1.25.8
 

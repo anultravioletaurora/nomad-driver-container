@@ -272,8 +272,8 @@ type statusDetail struct {
 // Schema confirmed against Apple container CLI 1.0.0_1 output.
 type inspectData struct {
 	Configuration inspectConfiguration `json:"configuration"`
-	Status        statusDetail 			`json:"status"`   
-	ExitCode      int		   			`json:"exitCode"` // set when container has stopped
+	Status        statusDetail         `json:"status"`
+	ExitCode      int                  `json:"exitCode"` // set when container has stopped
 }
 
 // statsData is an element in the JSON array returned by

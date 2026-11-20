@@ -25,7 +25,7 @@ import (
 	"github.com/hashicorp/nomad/plugins/shared/hclspec"
 	"github.com/hashicorp/nomad/plugins/shared/structs"
 
-	drv_version "github.com/hashicorp/nomad-driver-container/version"
+	drv_version "github.com/anultravioletaurora/nomad-driver-container/version"
 )
 
 // pluginVersion is the semantic version of this driver plugin.
