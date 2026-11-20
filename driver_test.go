@@ -404,11 +404,44 @@ func TestSetConfigDefaults(t *testing.T) {
 	if d.config.ImagePullTimeout != "5m" {
 		t.Errorf("ImagePullTimeout = %q; want %q", d.config.ImagePullTimeout, "5m")
 	}
+	if !d.config.Enabled {
+		t.Error("Enabled should default to true")
+	}
 	if !d.config.GC.Container {
 		t.Error("GC.Container should default to true")
 	}
-	if !d.config.Volumes.Enabled {
-		t.Error("Volumes.Enabled should default to true")
+	if d.config.Volumes.Enabled {
+		t.Error("Volumes.Enabled should default to false")
+	}
+}
+
+func TestSetConfig_KeepsExplicitFalse(t *testing.T) {
+	var raw []byte
+	err := base.MsgPackEncode(&raw, &PluginConfig{
+		Enabled:       false,
+		ContainerPath: "/opt/homebrew/bin/container",
+		GC:            GCConfig{Container: false},
+		Volumes:       VolumeConfig{Enabled: false},
+	})
+	if err != nil {
+		t.Fatalf("MsgPackEncode() error = %v", err)
+	}
+
+	d := newTestDriver()
+	if err := d.SetConfig(&base.Config{PluginConfig: raw}); err != nil {
+		t.Fatalf("SetConfig() error = %v", err)
+	}
+	if d.config.Enabled {
+		t.Error("Enabled = true; want false")
+	}
+	if d.config.GC.Container {
+		t.Error("GC.Container = true; want false")
+	}
+	if d.config.Volumes.Enabled {
+		t.Error("Volumes.Enabled = true; want false")
+	}
+	if d.config.ContainerPath != "/opt/homebrew/bin/container" {
+		t.Errorf("ContainerPath = %q", d.config.ContainerPath)
 	}
 }
 
@@ -445,8 +478,9 @@ func TestCapabilities(t *testing.T) {
 	if !caps.Exec {
 		t.Error("expected Exec = true")
 	}
-	if len(caps.NetIsolationModes) == 0 {
-		t.Error("expected at least one NetIsolationMode")
+	// Containers are VMs and can't join a Nomad network namespace.
+	if len(caps.NetIsolationModes) != 1 || caps.NetIsolationModes[0] != drivers.NetIsolationModeHost {
+		t.Errorf("NetIsolationModes = %v; want [host]", caps.NetIsolationModes)
 	}
 }
 
@@ -461,6 +495,34 @@ func TestBuildFingerprint_BinaryNotFound(t *testing.T) {
 	}
 	if fp.HealthDescription == "" {
 		t.Error("HealthDescription should not be empty")
+	}
+}
+
+func TestBuildFingerprint_Disabled(t *testing.T) {
+	d := newTestDriver()
+	d.config.Enabled = false
+	fp := d.buildFingerprint()
+	if fp.Health != drivers.HealthStateUndetected {
+		t.Errorf("Health = %v; want HealthStateUndetected", fp.Health)
+	}
+}
+
+// ── registryFromImage ─────────────────────────────────────────────────────────
+
+func TestRegistryFromImage(t *testing.T) {
+	cases := map[string]string{
+		"nginx":                          "docker.io",
+		"nginx:latest":                   "docker.io",
+		"library/nginx:latest":           "docker.io",
+		"ghcr.io/org/app:1.0":            "ghcr.io",
+		"registry.example.com:5000/app":  "registry.example.com:5000",
+		"localhost/app":                  "localhost",
+		"localhost:5000/app@sha256:abcd": "localhost:5000",
+	}
+	for image, want := range cases {
+		if got := registryFromImage(image); got != want {
+			t.Errorf("registryFromImage(%q) = %q; want %q", image, got, want)
+		}
 	}
 }
 
@@ -553,15 +615,9 @@ func TestBuildRunArgs_Volumes_Disabled(t *testing.T) {
 		Volumes: []string{"/host:/container"},
 	}
 
-	args, err := d.buildRunArgs(cfg, driverCfg, "c")
-	if err != nil {
-		t.Fatalf("buildRunArgs() error = %v", err)
-	}
-	// -v /host:/container should be absent when volumes are disabled.
-	for i, a := range args {
-		if a == "-v" && i+1 < len(args) && args[i+1] == "/host:/container" {
-			t.Error("expected volume to be omitted when volumes.enabled = false")
-		}
+	// Fail loudly rather than start the task without its volumes.
+	if _, err := d.buildRunArgs(cfg, driverCfg, "c"); err == nil {
+		t.Fatal("expected an error when volumes.enabled = false")
 	}
 }
 
@@ -581,13 +637,13 @@ func TestBuildRunArgs_Tmpfs(t *testing.T) {
 func TestBuildRunArgs_NetworkMode(t *testing.T) {
 	d := newTestDriver()
 	cfg := minimalTaskConfig("web", "alloc1234")
-	driverCfg := &TaskConfig{Image: "nginx", NetworkMode: "host"}
+	driverCfg := &TaskConfig{Image: "nginx", NetworkMode: "backend"}
 
 	args, err := d.buildRunArgs(cfg, driverCfg, "c")
 	if err != nil {
 		t.Fatalf("buildRunArgs() error = %v", err)
 	}
-	assertContainsPair(t, args, "--network", "host")
+	assertContainsPair(t, args, "--network", "backend")
 }
 
 func TestBuildRunArgs_DNS(t *testing.T) {
@@ -653,21 +709,48 @@ func TestBuildRunArgs_UserFromTaskConfig(t *testing.T) {
 	assertContainsPair(t, args, "--user", "nomad")
 }
 
-func TestBuildRunArgs_WorkingDirAndHostname(t *testing.T) {
+func TestBuildRunArgs_WorkingDir(t *testing.T) {
 	d := newTestDriver()
 	cfg := minimalTaskConfig("web", "alloc1234")
-	driverCfg := &TaskConfig{
-		Image:      "nginx",
-		WorkingDir: "/app",
-		Hostname:   "myhost",
-	}
+	driverCfg := &TaskConfig{Image: "nginx", WorkingDir: "/app"}
 
 	args, err := d.buildRunArgs(cfg, driverCfg, "c")
 	if err != nil {
 		t.Fatalf("buildRunArgs() error = %v", err)
 	}
 	assertContainsPair(t, args, "--workdir", "/app")
-	assertContainsPair(t, args, "--hostname", "myhost")
+}
+
+func TestBuildRunArgs_TaskDirs(t *testing.T) {
+	d := newTestDriver()
+	cfg := minimalTaskConfig("web", "alloc1234")
+	cfg.AllocDir = "/opt/nomad/alloc/alloc1234"
+	driverCfg := &TaskConfig{Image: "nginx"}
+
+	args, err := d.buildRunArgs(cfg, driverCfg, "c")
+	if err != nil {
+		t.Fatalf("buildRunArgs() error = %v", err)
+	}
+	assertContainsPair(t, args, "-v", "/opt/nomad/alloc/alloc1234/alloc:/alloc")
+	assertContainsPair(t, args, "-v", "/opt/nomad/alloc/alloc1234/web/local:/local")
+	assertContainsPair(t, args, "-v", "/opt/nomad/alloc/alloc1234/web/secrets:/secrets")
+}
+
+func TestBuildRunArgs_VolumeMounts(t *testing.T) {
+	d := newTestDriver()
+	cfg := minimalTaskConfig("web", "alloc1234")
+	cfg.Mounts = []*drivers.MountConfig{
+		{HostPath: "/srv/data", TaskPath: "/data"},
+		{HostPath: "/srv/ro", TaskPath: "/ro", Readonly: true},
+	}
+	driverCfg := &TaskConfig{Image: "nginx"}
+
+	args, err := d.buildRunArgs(cfg, driverCfg, "c")
+	if err != nil {
+		t.Fatalf("buildRunArgs() error = %v", err)
+	}
+	assertContainsPair(t, args, "-v", "/srv/data:/data")
+	assertContainsPair(t, args, "-v", "/srv/ro:/ro:ro")
 }
 
 func TestBuildRunArgs_Init(t *testing.T) {

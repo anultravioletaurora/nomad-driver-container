@@ -101,8 +101,8 @@ jobs:
         run: |
           mkdir -p build
           LDFLAGS="-s -w \
-            -X github.com/hashicorp/nomad-driver-container/version.Version=${{ steps.ver.outputs.VERSION }} \
-            -X github.com/hashicorp/nomad-driver-container/version.VersionPreRelease=${{ steps.ver.outputs.PRE }}"
+            -X github.com/anultravioletaurora/nomad-driver-container/version.Version=${{ steps.ver.outputs.VERSION }} \
+            -X github.com/anultravioletaurora/nomad-driver-container/version.VersionPreRelease=${{ steps.ver.outputs.PRE }}"
           go build -ldflags "$LDFLAGS" -trimpath -o build/nomad-driver-container .
 
       # ── Code sign ─────────────────────────────────────────────────────────

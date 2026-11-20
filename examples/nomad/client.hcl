@@ -24,7 +24,7 @@ plugin "nomad-driver-container" {
       container = true
     }
 
-    # Allow tasks to bind-mount host directories into containers.
+    # Allow tasks to bind-mount host directories into containers (off by default).
     volumes {
       enabled = true
     }

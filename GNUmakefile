@@ -11,8 +11,8 @@ BUILD_DIR   := ./build
 # initialiser segfaults at startup on macOS 27.
 export CGO_ENABLED ?= 0
 
-LDFLAGS := -X github.com/hashicorp/nomad-driver-container/version.Version=$(shell cat version/version.go | grep 'Version =' | head -1 | awk '{print $$3}' | tr -d '"') \
-           -X github.com/hashicorp/nomad-driver-container/version.VersionPreRelease=$(shell cat version/version.go | grep 'VersionPreRelease =' | head -1 | awk '{print $$3}' | tr -d '"')
+LDFLAGS := -X github.com/anultravioletaurora/nomad-driver-container/version.Version=$(shell cat version/version.go | grep 'Version =' | head -1 | awk '{print $$3}' | tr -d '"') \
+           -X github.com/anultravioletaurora/nomad-driver-container/version.VersionPreRelease=$(shell cat version/version.go | grep 'VersionPreRelease =' | head -1 | awk '{print $$3}' | tr -d '"')
 
 .PHONY: default dev build clean lint test fmt tidy sign
 
