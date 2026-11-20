@@ -1,9 +1,8 @@
-# Redis example with a sidecar exporter demonstrating shared networking.
+# Redis example with a sidecar Prometheus exporter.
 #
-# Both tasks join the same network namespace: the redis task creates the
-# namespace and the exporter task joins it via network_mode = "task:redis".
-# This lets the exporter reach Redis on 127.0.0.1 without exposing the
-# stats port externally.
+# Every container runs in its own VM with its own network stack, so the two
+# tasks can't share a network namespace. The exporter reaches Redis through
+# the port Redis publishes on the host.
 #
 # Run with:
 #   nomad job run examples/jobs/redis.nomad
@@ -65,12 +64,8 @@ job "redis" {
         image = "oliver006/redis_exporter:latest"
         ports = ["exporter"]
 
-        # Join the network namespace of the redis task so we can reach
-        # Redis on 127.0.0.1:6379 without an external port.
-        network_mode = "task:redis"
-
         env {
-          REDIS_ADDR = "redis://127.0.0.1:6379"
+          REDIS_ADDR = "redis://${NOMAD_ADDR_redis}"
         }
       }
 

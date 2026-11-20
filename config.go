@@ -53,11 +53,12 @@ var configSpec = hclspec.NewObject(map[string]*hclspec.Spec{
 		),
 	})),
 
-	// volumes controls whether host bind-mounts are permitted in tasks.
+	// volumes controls whether tasks may bind-mount arbitrary host paths.
+	// Off by default: any job could otherwise mount e.g. "/:/host".
 	"volumes": hclspec.NewBlock("volumes", false, hclspec.NewObject(map[string]*hclspec.Spec{
 		"enabled": hclspec.NewDefault(
 			hclspec.NewAttr("enabled", "bool", false),
-			hclspec.NewLiteral("true"),
+			hclspec.NewLiteral("false"),
 		),
 	})),
 
@@ -108,13 +109,9 @@ var taskConfigSpec = hclspec.NewObject(map[string]*hclspec.Spec{
 	// The driver maps them to -p host:container publish rules.
 	"ports": hclspec.NewAttr("ports", "list(string)", false),
 
-	// network_mode controls the container's network configuration.
-	// Supported values: default, host, none, or a user-defined network name.
-	// On macOS 26+ the full network management API is available.
+	// network_mode is the name of a `container network` to attach the
+	// container to. Defaults to the CLI's "default" network.
 	"network_mode": hclspec.NewAttr("network_mode", "string", false),
-
-	// hostname sets the container hostname.
-	"hostname": hclspec.NewAttr("hostname", "string", false),
 
 	// user sets the user or uid[:gid] for the container process.
 	"user": hclspec.NewAttr("user", "string", false),
@@ -240,7 +237,6 @@ type TaskConfig struct {
 	Tmpfs            []string          `codec:"tmpfs"`
 	Ports            []string          `codec:"ports"`
 	NetworkMode      string            `codec:"network_mode"`
-	Hostname         string            `codec:"hostname"`
 	User             string            `codec:"user"`
 	Labels           map[string]string `codec:"labels"`
 	CapAdd           []string          `codec:"cap_add"`

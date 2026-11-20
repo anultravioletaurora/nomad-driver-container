@@ -13,10 +13,12 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"sync"
 	"syscall"
 	"time"
 
 	hclog "github.com/hashicorp/go-hclog"
+	"github.com/hashicorp/nomad/client/allocdir"
 	cstructs "github.com/hashicorp/nomad/client/structs"
 	"github.com/hashicorp/nomad/drivers/shared/eventer"
 	"github.com/hashicorp/nomad/plugins/base"
@@ -59,10 +61,10 @@ var capabilities = &drivers.Capabilities{
 	SendSignals: true,
 	Exec:        true,
 	FSIsolation: fsisolation.Image,
+	// Each container is its own VM with its own network stack, so it can't
+	// join a Nomad-created network namespace. Only host mode is supported.
 	NetIsolationModes: []drivers.NetIsolationMode{
 		drivers.NetIsolationModeHost,
-		drivers.NetIsolationModeGroup,
-		drivers.NetIsolationModeTask,
 	},
 	MustInitiateNetwork: false,
 	MountConfigs:        drivers.MountConfigSupportAll,
@@ -84,6 +86,9 @@ type Driver struct {
 
 	// logger is the scoped logger for this driver instance.
 	logger hclog.Logger
+
+	// registryMu serialises authenticated image pulls; see pullImage.
+	registryMu sync.RWMutex
 
 	// ctx and signalShutdown are used to stop the driver cleanly.
 	ctx            context.Context
@@ -116,26 +121,27 @@ func (d *Driver) ConfigSchema() (*hclspec.Spec, error) {
 }
 
 func (d *Driver) SetConfig(cfg *base.Config) error {
-	var config PluginConfig
+	// Start from the defaults and decode over them, so that an explicit
+	// `false` in the operator's config is kept rather than reset. Nomad
+	// normally sends every field with configSpec's defaults already applied;
+	// these only matter when the config is empty.
+	config := PluginConfig{
+		Enabled:          true,
+		ContainerPath:    defaultContainerPath,
+		ImagePullTimeout: "5m",
+		GC:               GCConfig{Container: true},
+	}
 	if len(cfg.PluginConfig) != 0 {
 		if err := base.MsgPackDecode(cfg.PluginConfig, &config); err != nil {
 			return fmt.Errorf("failed to decode plugin config: %w", err)
 		}
 	}
 
-	// Apply defaults for zero values.
 	if config.ContainerPath == "" {
 		config.ContainerPath = defaultContainerPath
 	}
 	if config.ImagePullTimeout == "" {
 		config.ImagePullTimeout = "5m"
-	}
-	if !config.GC.Container {
-		// Default to cleaning up containers on task exit.
-		config.GC.Container = true
-	}
-	if !config.Volumes.Enabled {
-		config.Volumes.Enabled = true
 	}
 
 	d.config = &config
@@ -182,6 +188,13 @@ func (d *Driver) fingerprintLoop(ctx context.Context, ch chan<- *drivers.Fingerp
 }
 
 func (d *Driver) buildFingerprint() *drivers.Fingerprint {
+	if !d.config.Enabled {
+		return &drivers.Fingerprint{
+			Health:            drivers.HealthStateUndetected,
+			HealthDescription: "disabled",
+		}
+	}
+
 	binPath := d.containerPath()
 
 	// 1. Check the binary exists and is executable.
@@ -613,29 +626,62 @@ func (d *Driver) pullImage(image string, timeout time.Duration, auth *AuthConfig
 	ctx, cancel := context.WithTimeout(d.ctx, timeout)
 	defer cancel()
 
-	args := []string{"image", "pull"}
-
-	// Log in first if credentials are provided.
+	// The container CLI keeps registry logins host-wide, in the keychain.
+	// An authenticated pull holds registryMu exclusively from login to
+	// logout, so no other pull runs with this task's credentials and they
+	// don't outlive the pull.
 	if auth != nil && auth.Username != "" {
-		loginArgs := []string{"registry", "login"}
-		if auth.ServerAddress != "" {
-			loginArgs = append(loginArgs, auth.ServerAddress)
+		server := auth.ServerAddress
+		if server == "" {
+			server = registryFromImage(image)
 		}
-		loginArgs = append(loginArgs, "--username", auth.Username)
 
-		loginCmd := exec.CommandContext(ctx, d.containerPath(), loginArgs...)
-		loginCmd.Stdin = strings.NewReader(auth.Password + "\n")
+		d.registryMu.Lock()
+		defer d.registryMu.Unlock()
+
+		loginCmd := exec.CommandContext(ctx, d.containerPath(), "registry", "login",
+			"--username", auth.Username, "--password-stdin", server)
+		loginCmd.Stdin = strings.NewReader(auth.Password)
 		if out, err := loginCmd.CombinedOutput(); err != nil {
-			return fmt.Errorf("registry login failed: %w (output: %s)", err, string(out))
+			return fmt.Errorf("registry login to %s failed: %w (output: %s)", server, err, string(out))
 		}
+		defer func() {
+			// Use the driver context: the pull timeout may already have expired.
+			out, err := exec.CommandContext(d.ctx, d.containerPath(),
+				"registry", "logout", server).CombinedOutput()
+			if err != nil {
+				d.logger.Warn("registry logout failed",
+					"server", server, "error", err, "output", string(out))
+			}
+		}()
+	} else {
+		d.registryMu.RLock()
+		defer d.registryMu.RUnlock()
 	}
 
-	args = append(args, image)
-	out, err := exec.CommandContext(ctx, d.containerPath(), args...).CombinedOutput()
+	out, err := exec.CommandContext(ctx, d.containerPath(), "image", "pull", image).CombinedOutput()
 	if err != nil {
 		return fmt.Errorf("image pull %q failed: %w (output: %s)", image, err, string(out))
 	}
 	return nil
+}
+
+// defaultRegistry is the registry the container CLI uses for image references
+// without a registry host, e.g. "nginx:latest".
+const defaultRegistry = "docker.io"
+
+// registryFromImage returns the registry host of an image reference, using
+// the same rule as Docker: the first path component is a registry host only
+// if it contains a "." or ":" or is "localhost".
+func registryFromImage(image string) string {
+	first, _, found := strings.Cut(image, "/")
+	if !found {
+		return defaultRegistry
+	}
+	if strings.ContainsAny(first, ".:") || first == "localhost" {
+		return first
+	}
+	return defaultRegistry
 }
 
 // inspectContainer runs `container inspect <name>` and returns parsed output.
@@ -718,13 +764,26 @@ func (d *Driver) buildRunArgs(
 	}
 
 	// ── Volume mounts ────────────────────────────────────────────────────────
-	if d.config.Volumes.Enabled {
-		for _, v := range driverCfg.Volumes {
-			args = append(args, "-v", v)
-		}
+	if len(driverCfg.Volumes) > 0 && !d.config.Volumes.Enabled {
+		return nil, fmt.Errorf("volumes are disabled; set volumes.enabled = true in the plugin config to allow host bind mounts")
+	}
+	for _, v := range driverCfg.Volumes {
+		args = append(args, "-v", v)
 	}
 
-	// Honour Nomad-managed mounts (e.g. alloc/, local/, secrets/).
+	// Mount the task's alloc/, local/ and secrets/ directories. Nomad points
+	// NOMAD_ALLOC_DIR, NOMAD_TASK_DIR and NOMAD_SECRETS_DIR at these paths
+	// for image-isolated drivers.
+	if cfg.AllocDir != "" {
+		taskDir := cfg.TaskDir()
+		args = append(args,
+			"-v", taskDir.SharedAllocDir+":"+allocdir.SharedAllocContainerPath,
+			"-v", taskDir.LocalDir+":"+allocdir.TaskLocalContainerPath,
+			"-v", taskDir.SecretsDir+":"+allocdir.TaskSecretsContainerPath,
+		)
+	}
+
+	// Honour Nomad-managed mounts (volume_mount blocks).
 	for _, m := range cfg.Mounts {
 		spec := fmt.Sprintf("%s:%s", m.HostPath, m.TaskPath)
 		if m.Readonly {
@@ -783,11 +842,6 @@ func (d *Driver) buildRunArgs(
 	// ── Working directory ────────────────────────────────────────────────────
 	if driverCfg.WorkingDir != "" {
 		args = append(args, "--workdir", driverCfg.WorkingDir)
-	}
-
-	// ── Hostname ─────────────────────────────────────────────────────────────
-	if driverCfg.Hostname != "" {
-		args = append(args, "--hostname", driverCfg.Hostname)
 	}
 
 	// ── Entrypoint ───────────────────────────────────────────────────────────

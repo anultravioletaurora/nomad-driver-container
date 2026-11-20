@@ -43,18 +43,15 @@ performance on Apple Silicon.
 - **Port publishing** driven by Nomad's `network { port … }` block; dynamic
   host ports are automatically wired to container ports (`-p host:container`)
 - **Named user-defined networks** using the `network_mode` task config key
-- **Shared network namespaces** between tasks in the same group with
-  `network_mode = "task:<othertask>"` — enables sidecar patterns without
-  exposing internal ports
-- **Host networking** (`network_mode = "host"`)
-- **Isolated networking** (`network_mode = "none"`)
 - **Custom DNS** servers, search domains, and resolver options
 
 ### Storage
-- **Bind-mount volumes** (`volumes = ["host:container:options"]`) — operator
-  controlled via the `volumes.enabled` plugin config flag
-- **Nomad alloc directory mounts** (`/alloc`, `/local`, `/secrets`) injected
-  automatically through Nomad's standard mount mechanism
+- **Bind-mount volumes** (`volumes = ["host:container:options"]`) — off by
+  default; the operator enables them with the `volumes.enabled` plugin config
+  flag
+- **Nomad task directories** mounted at `/alloc`, `/local` and `/secrets`, so
+  `template` and `artifact` output is visible inside the container
+- **Host volumes** from `volume_mount` blocks
 - **tmpfs mounts** at arbitrary container paths
 - **Read-only root filesystem** (`readonly_rootfs = true`)
 
@@ -185,7 +182,9 @@ plugin "nomad-driver-container" {
       container = true
     }
 
-    # Allow tasks to bind-mount host paths into containers.
+    # Allow tasks to bind-mount arbitrary host paths into containers with
+    # the task-level `volumes` option. Off by default, since it lets any job
+    # mount any path the Nomad client user can read.
     volumes {
       enabled = true
     }
@@ -249,11 +248,10 @@ constraint {
 | `entrypoint` | string | `""` | Override the image's ENTRYPOINT |
 | `working_dir` | string | `""` | Working directory inside the container |
 | `env` | map(string) | `{}` | Extra environment variables (Nomad runtime vars are always injected) |
-| `volumes` | list(string) | `[]` | `host:container[:options]` bind-mount specs |
+| `volumes` | list(string) | `[]` | `host:container[:options]` bind-mount specs; requires `volumes.enabled` in the plugin config |
 | `tmpfs` | list(string) | `[]` | Container paths to mount as tmpfs |
 | `ports` | list(string) | `[]` | Port labels from the group `network` block to publish |
-| `network_mode` | string | `""` | Network mode: `default`, `host`, `none`, `task:<name>`, or a named network |
-| `hostname` | string | `""` | Container hostname |
+| `network_mode` | string | `""` | Name of a `container network` to attach to (default: `default`) |
 | `user` | string | `""` | `name\|uid[:gid]` for the container process |
 | `labels` | map(string) | `{}` | Key/value metadata labels on the container |
 | `cap_add` | list(string) | `[]` | Linux capabilities to add (e.g. `"NET_ADMIN"`) |
@@ -277,9 +275,15 @@ constraint {
 auth {
   username       = "myuser"
   password       = "s3cr3t"
-  server_address = "registry.example.com"  # optional
+  server_address = "registry.example.com"  # optional; defaults to the image's registry
 }
 ```
+
+The `container` CLI stores registry logins host-wide in the keychain, so the
+driver logs in just before the pull and logs out right after it, holding a lock
+so that no other pull runs in between. As a result, a task with `auth` also
+removes any login to the same registry that was made by hand with
+`container registry login`. Use one approach or the other for a given registry.
 
 ---
 
@@ -319,11 +323,11 @@ job "nginx" {
 }
 ```
 
-### Sidecar / shared network namespace (Redis + exporter)
+### Sidecar (Redis + exporter)
 
 See [`examples/jobs/redis.nomad`](examples/jobs/redis.nomad) for a two-task
-setup where a Prometheus exporter joins the Redis task's network namespace via
-`network_mode = "task:redis"`.
+setup where a Prometheus exporter reaches Redis through its published port.
+Every container is its own VM, so tasks can't share a network namespace.
 
 ### Rosetta 2 — running x86_64 images on Apple Silicon
 
@@ -379,6 +383,7 @@ nomad alloc exec <ALLOC_ID> /bin/sh
 | **macOS 26+ required** | The Apple container platform targets macOS 26; it will not run on macOS 15 without functional gaps. |
 | **Apple Silicon only** | The underlying Virtualization framework features used by `container` require Apple Silicon. |
 | **Combined log stream** | `container logs` does not separate stdout and stderr; the driver forwards the combined stream to Nomad's stdout FIFO. |
+| **Host networking only** | Each container is a VM with its own network stack, so it can't join a Nomad-managed network namespace. Group `network { mode = "bridge" }` and `cni/*` modes aren't supported; tasks reach each other through published ports. |
 | **No device passthrough** | Each container runs in its own VM; `/dev/xxx` device passthrough is not currently supported by this driver. |
 | **Inspect / stats JSON schema** | The exact JSON field names emitted by `container inspect` and `container stats --format json` should be verified against the version of `container` you deploy. See the `TODO` comments in `config.go`. |
 | **No `--log-driver` equivalent** | Apple's `container` does not expose pluggable log drivers; all log output goes through `container logs`. |
@@ -397,7 +402,7 @@ nomad alloc exec <ALLOC_ID> /bin/sh
 | Signal delivery | ✅ | ✅ | ✅ |
 | Exec into container | ✅ | ✅ | ✅ |
 | Init process | ✅ | ✅ | ✅ |
-| Shared network namespace | ✅ | ✅ | ✅ |
+| Shared network namespace | ✅ | ✅ | ❌ |
 | Nomad log collection | ✅ | ✅ | ✅ |
 | Pluggable log drivers | ✅ | ✅ | ❌ |
 | SELinux options | ❌ | ✅ | ❌ |
