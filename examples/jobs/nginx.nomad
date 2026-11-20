@@ -43,10 +43,9 @@ job "nginx" {
         # Run a minimal init process to forward signals and reap zombies.
         init = true
 
-        # Mount a custom nginx config from the Nomad alloc directory.
-        # volumes = [
-        #   "local/nginx.conf:/etc/nginx/nginx.conf:ro",
-        # ]
+        # The task's local/ directory is mounted at /local, so a config
+        # rendered by a template block can be used directly:
+        # args = ["nginx", "-c", "/local/nginx.conf", "-g", "daemon off;"]
 
         # Capabilities: drop all unused capabilities for least-privilege.
         # Requires container CLI ≥ 0.11.0.
